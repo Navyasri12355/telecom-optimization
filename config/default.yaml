@@ -1,0 +1,128 @@
+# Default configuration for AI-driven telecom network optimization system
+
+# Network simulation settings
+simulation:
+  topology:
+    nodes:
+      - name: "UE1"
+        type: "UE"
+      - name: "UE2"
+        type: "UE"
+      - name: "eNodeB1"
+        type: "eNodeB"
+      - name: "CoreRouter1"
+        type: "CoreRouter"
+      - name: "Server1"
+        type: "Server"
+    
+    links:
+      - id: "link1"
+        source: "UE1"
+        destination: "eNodeB1"
+        bandwidth: 100.0  # Mbps
+      - id: "link2"
+        source: "UE2"
+        destination: "eNodeB1"
+        bandwidth: 100.0  # Mbps
+      - id: "link3"
+        source: "eNodeB1"
+        destination: "CoreRouter1"
+        bandwidth: 500.0  # Mbps
+      - id: "link4"
+        source: "CoreRouter1"
+        destination: "Server1"
+        bandwidth: 1000.0  # Mbps
+  
+  traffic:
+    pattern: "OnOff"
+    data_rate: "10Mbps"
+    packet_size: 1024
+    on_time: "1s"
+    off_time: "0.5s"
+
+# KPI collection settings
+telemetry:
+  collection_interval: 1.0  # seconds
+  export_formats:
+    - "csv"
+    - "prometheus"
+  
+  storage:
+    retention_days: 30
+    max_storage_gb: 10
+  
+  dashboard:
+    update_interval: 2.0  # seconds
+    grafana_endpoint: "http://localhost:3000"
+    librenms_endpoint: "http://localhost:8000"
+
+# Predictive agent settings
+prediction:
+  algorithms:
+    - "ARIMA"
+    - "Prophet"
+    - "LSTM"
+  
+  analysis_window: 15  # seconds
+  prediction_horizon: 10  # seconds
+  update_interval: 2.0  # seconds
+  accuracy_threshold: 15.0  # MAPE percentage
+
+# Optimization agent settings
+optimization:
+  thresholds:
+    high_load: 80.0  # percentage
+    low_load: 30.0   # percentage
+  
+  actions:
+    bandwidth_adjustment: true
+    queue_size_adjustment: true
+    scheduling_adjustment: true
+  
+  conflict_resolution: "priority_based"
+
+# Anomaly detection settings
+anomaly_detection:
+  algorithms:
+    - "IsolationForest"
+    - "OneClassSVM"
+    - "Autoencoder"
+  
+  detection_interval: 5.0  # seconds
+  thresholds:
+    packet_loss_spike: 5.0  # percentage
+    latency_threshold: 100.0  # milliseconds
+    throughput_drop: 20.0  # percentage
+  
+  alert_severity_levels:
+    - "LOW"
+    - "MEDIUM"
+    - "HIGH"
+    - "CRITICAL"
+
+# Master orchestrator settings
+orchestration:
+  control_loop_interval: 1.0  # seconds
+  messaging_protocol: "ZeroMQ"  # or "MQTT"
+  
+  conflict_resolution:
+    priority_rules:
+      - "CRITICAL_ANOMALY"
+      - "HIGH_LOAD_OPTIMIZATION"
+      - "PREDICTIVE_ADJUSTMENT"
+      - "ENERGY_SAVING"
+
+# Logging settings
+logging:
+  level: "INFO"
+  file: "logs/ai_telecom.log"
+  max_file_size: "10MB"
+  backup_count: 5
+  
+  components:
+    simulation: "INFO"
+    prediction: "INFO"
+    optimization: "INFO"
+    anomaly: "INFO"
+    orchestration: "INFO"
+    telemetry: "INFO"
