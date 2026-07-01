@@ -232,8 +232,8 @@ curl -X POST http://localhost:5050/api/parameters \
 ### Bandwidth constraints (validated server-side)
 
 - Minimum: **0.1 Mbps** per link
-- Maximum: **1 000 Mbps** per link
-- Queue size range: **10 – 10 000 packets**
+- Maximum: **1000 Mbps** per link
+- Queue size range: **10 – 10000 packets**
 
 ### Supported scheduling algorithms
 
@@ -274,7 +274,7 @@ All anomalies are classified with a severity level:
 | `HIGH`     | Orange |
 | `CRITICAL` | Red    |
 
-The affected node reported with each anomaly reflects the actual bottleneck node identified by the KPI engine, not a hardcoded default.
+The affected node reported with each anomaly reflects the actual bottleneck node identified by the KPI engine.
 
 ---
 
