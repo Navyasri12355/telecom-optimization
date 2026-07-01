@@ -47,7 +47,7 @@ class AnomalyAgent(AnomalyAgentInterface):
                  detection_algorithms: Optional[List[str]] = None,
                  detection_interval: float = 5.0,
                  historical_window: int = 100,
-                 contamination_rate: float = 0.1):
+                 contamination_rate: float = 0.05):  # lowered from 0.1 to reduce false positives
         """
         Initialize the anomaly detection agent.
         
@@ -82,10 +82,10 @@ class AnomalyAgent(AnomalyAgentInterface):
         
         # Thresholds for different anomaly types
         self.thresholds = {
-            'packet_loss_spike': 5.0,  # percentage
-            'latency_threshold': 100.0,  # milliseconds
-            'throughput_drop': 0.3,  # 30% drop
-            'utilization_spike': 0.9  # 90% utilization
+            'packet_loss_spike': 5.0,   # percentage (0-100)
+            'latency_threshold': 100.0, # milliseconds
+            'throughput_drop': 0.3,     # 30% relative drop
+            'utilization_spike': 90.0   # percentage (0-100) — was wrongly 0.9 (fraction)
         }
         
         self.logger.info(f"AnomalyAgent initialized with algorithms: {self.detection_algorithms}")
@@ -171,8 +171,8 @@ class AnomalyAgent(AnomalyAgentInterface):
             rule_anomalies = self._detect_rule_based_anomalies(kpis)
             anomalies.extend(rule_anomalies)
             
-            # ML-based detection (if we have enough data)
-            if len(self.historical_data) >= 20:
+            # ML-based detection (require more data to avoid warmup false positives)
+            if len(self.historical_data) >= 50:
                 ml_anomalies = self._detect_ml_based_anomalies(features, kpis)
                 anomalies.extend(ml_anomalies)
             
@@ -219,60 +219,68 @@ class AnomalyAgent(AnomalyAgentInterface):
         """Detect anomalies using rule-based thresholds."""
         anomalies = []
         current_time = datetime.now()
-        
+        bottleneck = kpis.node_id or 'core_router'
+
         try:
-            # Packet loss spike detection
+            # Packet loss spike — queue overflow at the bottleneck node
             if kpis.packet_loss > self.thresholds['packet_loss_spike']:
                 anomaly = Anomaly(
                     anomaly_type=AnomalyType.PACKET_LOSS,
                     severity=self._calculate_severity('packet_loss', kpis.packet_loss),
-                    affected_nodes=[kpis.node_id],
+                    affected_nodes=[bottleneck],
                     detection_time=current_time,
                     confidence_score=min(0.9, kpis.packet_loss / 10.0)
                 )
                 anomalies.append(anomaly)
-            
-            # Latency threshold violation
+
+            # Latency spike — congestion builds up through enodeb and core path
             if kpis.latency > self.thresholds['latency_threshold']:
+                # Latency affects the full path from access to core
+                latency_nodes = [bottleneck]
+                if bottleneck not in ('enodeb', 'core_router'):
+                    latency_nodes = [bottleneck, 'enodeb']
                 anomaly = Anomaly(
                     anomaly_type=AnomalyType.LATENCY_SPIKE,
                     severity=self._calculate_severity('latency', kpis.latency),
-                    affected_nodes=[kpis.node_id],
+                    affected_nodes=latency_nodes,
                     detection_time=current_time,
                     confidence_score=min(0.9, kpis.latency / 200.0)
                 )
                 anomalies.append(anomaly)
-            
-            # Throughput drop detection (compared to recent average)
+
+            # Throughput drop — bottleneck node + its upstream input link
             if len(self.historical_data) >= 5:
                 recent_throughput = [kpi.throughput for kpi in list(self.historical_data)[-5:]]
                 avg_throughput = np.mean(recent_throughput)
-                
+
                 if avg_throughput > 0 and kpis.throughput < avg_throughput * (1 - self.thresholds['throughput_drop']):
+                    # Throughput drop is visible at the bottleneck and the server end
+                    drop_nodes = list({bottleneck, 'server'})
                     anomaly = Anomaly(
                         anomaly_type=AnomalyType.THROUGHPUT_DROP,
-                        severity=self._calculate_severity('throughput_drop', 
-                                                        (avg_throughput - kpis.throughput) / avg_throughput),
-                        affected_nodes=[kpis.node_id],
+                        severity=self._calculate_severity('throughput_drop',
+                                                         (avg_throughput - kpis.throughput) / avg_throughput),
+                        affected_nodes=drop_nodes,
                         detection_time=current_time,
                         confidence_score=0.8
                     )
                     anomalies.append(anomaly)
-            
-            # Utilization spike detection
+
+            # Utilization spike — the saturated bottleneck node itself
             if kpis.utilization > self.thresholds['utilization_spike']:
                 anomaly = Anomaly(
                     anomaly_type=AnomalyType.UTILIZATION_SPIKE,
                     severity=self._calculate_severity('utilization', kpis.utilization),
-                    affected_nodes=[kpis.node_id],
+                    affected_nodes=[bottleneck],
                     detection_time=current_time,
                     confidence_score=0.85
                 )
                 anomalies.append(anomaly)
-                
+
         except Exception as e:
             self.logger.error(f"Error in rule-based detection: {e}")
-        
+
+
         return anomalies
     
     def _detect_ml_based_anomalies(self, features: np.ndarray, current_kpis: KPIMetrics) -> List[Anomaly]:
@@ -382,11 +390,12 @@ class AnomalyAgent(AnomalyAgentInterface):
                     return SeverityLevel.LOW
                     
             elif anomaly_type == 'utilization':
-                if value > 0.98:
+                # value is a percentage (0-100), not a fraction
+                if value > 98.0:
                     return SeverityLevel.CRITICAL
-                elif value > 0.95:
+                elif value > 95.0:
                     return SeverityLevel.HIGH
-                elif value > 0.90:
+                elif value > 90.0:
                     return SeverityLevel.MEDIUM
                 else:
                     return SeverityLevel.LOW

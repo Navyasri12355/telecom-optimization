@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-Assisted Network Optimization Dashboard</title>
+  <meta name="description" content="Real-time AI-driven telecom network optimization dashboard. Monitor KPIs, tune parameters, and visualize live network simulation." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Background particles -->
+  <div class="bg-particles" id="bgParticles"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <circle cx="14" cy="14" r="13" stroke="url(#logoGrad)" stroke-width="2"/>
+            <path d="M7 14h4l2-5 4 10 2-5h2" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
+                <stop offset="0%" stop-color="#6366f1"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <div class="logo-title">AI-Assisted Network Optimization</div>
+        </div>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-text" id="statusText">Initializing…</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="sim-time">
+        <span class="sim-time-label">SIM TIME</span>
+        <span class="sim-time-value mono" id="simTime">00:00:00</span>
+      </div>
+      <button class="btn btn-primary" id="startStopBtn">▶ Start Simulation</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="main-layout">
+
+    <!-- ======================== LEFT: Controls ======================== -->
+    <aside class="sidebar">
+
+      <!-- Preset Scenarios -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🎯</span>
+          <h3>Scenario Presets</h3>
+        </div>
+        <div class="preset-grid">
+          <button class="preset-btn active" id="preset-normal" onclick="applyPreset('normal')">
+            <span class="preset-icon">📶</span>
+            <span>Normal</span>
+          </button>
+          <button class="preset-btn" id="preset-congestion" onclick="applyPreset('congestion')">
+            <span class="preset-icon">⚠️</span>
+            <span>Congestion</span>
+          </button>
+          <button class="preset-btn" id="preset-optimized" onclick="applyPreset('optimized')">
+            <span class="preset-icon">⚡</span>
+            <span>Optimized</span>
+          </button>
+          <button class="preset-btn" id="preset-failure" onclick="applyPreset('failure')">
+            <span class="preset-icon">🔴</span>
+            <span>Link Failure</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bandwidth Controls -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📡</span>
+          <h3>Link Bandwidth (Mbps)</h3>
+        </div>
+        <div class="param-group">
+          <div class="param-row">
+            <div class="param-label">
+              <span>UE1 ↔ eNodeB</span>
+              <span class="param-value mono" id="bw-ue1-val">10 Mbps</span>
+            </div>
+            <input type="range" class="slider" id="bw-ue1" min="1" max="100" value="10" step="1" oninput="updateBandwidth('ue1_enodeb', this.value)">
+            <div class="slider-track-labels"><span>1</span><span>100</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>eNodeB ↔ Core</span>
+              <span class="param-value mono" id="bw-enodeb-val">100 Mbps</span>
+            </div>
+            <input type="range" class="slider" id="bw-enodeb" min="10" max="1000" value="100" step="10" oninput="updateBandwidth('enodeb_core', this.value)">
+            <div class="slider-track-labels"><span>10</span><span>1000</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>Core ↔ Server</span>
+              <span class="param-value mono" id="bw-core-val">50 Mbps</span>
+            </div>
+            <input type="range" class="slider" id="bw-core" min="5" max="500" value="50" step="5" oninput="updateBandwidth('core_server', this.value)">
+            <div class="slider-track-labels"><span>5</span><span>500</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>UE2 ↔ Server</span>
+              <span class="param-value mono" id="bw-ue2-val">20 Mbps</span>
+            </div>
+            <input type="range" class="slider" id="bw-ue2" min="1" max="100" value="20" step="1" oninput="updateBandwidth('ue2_server', this.value)">
+            <div class="slider-track-labels"><span>1</span><span>100</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Size Controls -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📦</span>
+          <h3>Queue Sizes (packets)</h3>
+        </div>
+        <div class="param-group">
+          <div class="param-row">
+            <div class="param-label">
+              <span>UE1</span>
+              <span class="param-value mono" id="q-ue1-val">100</span>
+            </div>
+            <input type="range" class="slider" id="q-ue1" min="10" max="1000" value="100" step="10" oninput="updateQueue('ue1', this.value)">
+            <div class="slider-track-labels"><span>10</span><span>1000</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>eNodeB</span>
+              <span class="param-value mono" id="q-enodeb-val">200</span>
+            </div>
+            <input type="range" class="slider" id="q-enodeb" min="10" max="2000" value="200" step="10" oninput="updateQueue('enodeb', this.value)">
+            <div class="slider-track-labels"><span>10</span><span>2000</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>Core Router</span>
+              <span class="param-value mono" id="q-core-val">150</span>
+            </div>
+            <input type="range" class="slider" id="q-core" min="10" max="2000" value="150" step="10" oninput="updateQueue('core_router', this.value)">
+            <div class="slider-track-labels"><span>10</span><span>2000</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>Server</span>
+              <span class="param-value mono" id="q-server-val">100</span>
+            </div>
+            <input type="range" class="slider" id="q-server" min="10" max="1000" value="100" step="10" oninput="updateQueue('server', this.value)">
+            <div class="slider-track-labels"><span>10</span><span>1000</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scheduling Algorithm -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">⚙️</span>
+          <h3>Scheduling Algorithm</h3>
+        </div>
+        <div class="algo-grid">
+          <div class="algo-row" id="algo-enodeb-row">
+            <span class="algo-node-label">eNodeB</span>
+            <div class="algo-pills" data-node="enodeb">
+              <button class="algo-pill" data-algo="FIFO" onclick="updateScheduling('enodeb', 'FIFO', this)">FIFO</button>
+              <button class="algo-pill active" data-algo="WFQ" onclick="updateScheduling('enodeb', 'WFQ', this)">WFQ</button>
+              <button class="algo-pill" data-algo="PQ" onclick="updateScheduling('enodeb', 'PQ', this)">PQ</button>
+              <button class="algo-pill" data-algo="RR" onclick="updateScheduling('enodeb', 'RR', this)">RR</button>
+            </div>
+          </div>
+          <div class="algo-row" id="algo-core-row">
+            <span class="algo-node-label">Core Router</span>
+            <div class="algo-pills" data-node="core_router">
+              <button class="algo-pill" data-algo="FIFO" onclick="updateScheduling('core_router', 'FIFO', this)">FIFO</button>
+              <button class="algo-pill active" data-algo="WFQ" onclick="updateScheduling('core_router', 'WFQ', this)">WFQ</button>
+              <button class="algo-pill" data-algo="PQ" onclick="updateScheduling('core_router', 'PQ', this)">PQ</button>
+              <button class="algo-pill" data-algo="RR" onclick="updateScheduling('core_router', 'RR', this)">RR</button>
+            </div>
+          </div>
+        </div>
+        <!-- Algorithm info box -->
+        <div class="algo-info" id="algoInfo">
+          <span class="algo-info-label">WFQ</span>: Weighted Fair Queueing — balances bandwidth fairly across flows. Low jitter, good for mixed traffic.
+        </div>
+      </div>
+
+      <!-- Traffic Load Injector -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">💉</span>
+          <h3>Traffic Injection</h3>
+        </div>
+        <div class="param-group">
+          <div class="param-row">
+            <div class="param-label">
+              <span>UE1 Traffic Load</span>
+              <span class="param-value mono" id="load-ue1-val">60%</span>
+            </div>
+            <input type="range" class="slider" id="load-ue1" min="0" max="100" value="60" step="1" oninput="updateTrafficLoad('ue1', this.value)">
+            <div class="slider-track-labels"><span>0%</span><span>100%</span></div>
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              <span>UE2 Traffic Load</span>
+              <span class="param-value mono" id="load-ue2-val">40%</span>
+            </div>
+            <input type="range" class="slider" id="load-ue2" min="0" max="100" value="40" step="1" oninput="updateTrafficLoad('ue2', this.value)">
+            <div class="slider-track-labels"><span>0%</span><span>100%</span></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ======================== CENTER: Visualization ======================== -->
+    <div class="center-panel">
+
+      <!-- KPI Stat Cards Row -->
+      <div class="kpi-row">
+        <div class="kpi-card" id="kpi-throughput">
+          <div class="kpi-trend" id="trend-throughput">↑</div>
+          <div class="kpi-icon">📊</div>
+          <div class="kpi-value mono" id="val-throughput">—</div>
+          <div class="kpi-label">Throughput</div>
+          <div class="kpi-unit">Mbps</div>
+          <div class="kpi-sparkline-wrap"><canvas class="kpi-sparkline" id="spark-throughput"></canvas></div>
+        </div>
+        <div class="kpi-card" id="kpi-latency">
+          <div class="kpi-trend" id="trend-latency">→</div>
+          <div class="kpi-icon">⏱️</div>
+          <div class="kpi-value mono" id="val-latency">—</div>
+          <div class="kpi-label">Latency</div>
+          <div class="kpi-unit">ms</div>
+          <div class="kpi-sparkline-wrap"><canvas class="kpi-sparkline" id="spark-latency"></canvas></div>
+        </div>
+        <div class="kpi-card" id="kpi-loss">
+          <div class="kpi-trend" id="trend-loss">→</div>
+          <div class="kpi-icon">📉</div>
+          <div class="kpi-value mono" id="val-loss">—</div>
+          <div class="kpi-label">Packet Loss</div>
+          <div class="kpi-unit">%</div>
+          <div class="kpi-sparkline-wrap"><canvas class="kpi-sparkline" id="spark-loss"></canvas></div>
+        </div>
+        <div class="kpi-card" id="kpi-util">
+          <div class="kpi-trend" id="trend-util">→</div>
+          <div class="kpi-icon">💡</div>
+          <div class="kpi-value mono" id="val-util">—</div>
+          <div class="kpi-label">Utilization</div>
+          <div class="kpi-unit">%</div>
+          <div class="kpi-sparkline-wrap"><canvas class="kpi-sparkline" id="spark-util"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Network Topology Canvas -->
+      <div class="card topology-card">
+        <div class="card-header">
+          <span class="card-icon">🗺️</span>
+          <h3>Live Network Topology</h3>
+          <div class="topology-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#6366f1"></span>UE</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#06b6d4"></span>eNodeB</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Core</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#10b981"></span>Server</span>
+          </div>
+        </div>
+        <canvas id="topoCanvas"></canvas>
+      </div>
+
+      <!-- Time-Series Charts -->
+      <div class="charts-row">
+        <div class="card chart-card">
+          <div class="card-header">
+            <span class="card-icon">📈</span>
+            <h3>Throughput & Utilization</h3>
+          </div>
+          <canvas id="chartThroughput"></canvas>
+        </div>
+        <div class="card chart-card">
+          <div class="card-header">
+            <span class="card-icon">📉</span>
+            <h3>Latency & Packet Loss</h3>
+          </div>
+          <canvas id="chartLatency"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ======================== RIGHT: Log & Analysis ======================== -->
+    <aside class="right-panel">
+
+      <!-- AI Optimization Insights -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🤖</span>
+          <h3>AI Optimizer</h3>
+        </div>
+        <div class="ai-panel" id="aiPanel">
+          <div class="ai-idle">
+            <div class="ai-pulse"></div>
+            <span>Awaiting simulation data…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Anomaly Alerts -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🚨</span>
+          <h3>Anomaly Alerts</h3>
+          <span class="badge" id="anomalyCount">0</span>
+        </div>
+        <div class="alerts-list" id="alertsList">
+          <div class="no-alerts">✅ No anomalies detected</div>
+        </div>
+      </div>
+
+      <!-- Parameter Change Log -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <h3>Change Log</h3>
+          <button class="btn-clear" onclick="clearLog()">Clear</button>
+        </div>
+        <div class="log-container" id="logContainer">
+          <div class="log-empty">No changes yet.</div>
+        </div>
+      </div>
+
+      <!-- Per-Link Utilization Bars -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🔗</span>
+          <h3>Link Saturation</h3>
+        </div>
+        <div class="link-bars" id="linkBars">
+          <div class="link-bar-row">
+            <span class="link-bar-label">UE1↔eNodeB</span>
+            <div class="link-bar-track">
+              <div class="link-bar-fill" id="lb-ue1" style="width:60%"></div>
+            </div>
+            <span class="link-bar-pct mono" id="lbp-ue1">60%</span>
+          </div>
+          <div class="link-bar-row">
+            <span class="link-bar-label">eNodeB↔Core</span>
+            <div class="link-bar-track">
+              <div class="link-bar-fill" id="lb-enodeb" style="width:40%"></div>
+            </div>
+            <span class="link-bar-pct mono" id="lbp-enodeb">40%</span>
+          </div>
+          <div class="link-bar-row">
+            <span class="link-bar-label">Core↔Server</span>
+            <div class="link-bar-track">
+              <div class="link-bar-fill" id="lb-core" style="width:50%"></div>
+            </div>
+            <span class="link-bar-pct mono" id="lbp-core">50%</span>
+          </div>
+          <div class="link-bar-row">
+            <span class="link-bar-label">UE2↔Server</span>
+            <div class="link-bar-track">
+              <div class="link-bar-fill" id="lb-ue2" style="width:30%"></div>
+            </div>
+            <span class="link-bar-pct mono" id="lbp-ue2">30%</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -941,6 +941,16 @@ class MockNetworkSimulator(BaseNetworkSimulator):
         super().__init__()
         self._simulation_start_time = None
         self._traffic_start_time = None
+        # Traffic load per UE (fraction 0-1); updated externally via set_traffic_load()
+        self._traffic_load = {'ue1': 0.60, 'ue2': 0.40}
+
+    def set_traffic_load(self, traffic_load: dict) -> None:
+        """Update per-UE traffic load fractions (0-1)."""
+        if 'ue1' in traffic_load:
+            self._traffic_load['ue1'] = float(traffic_load['ue1'])
+        if 'ue2' in traffic_load:
+            self._traffic_load['ue2'] = float(traffic_load['ue2'])
+        logger.info(f"Traffic load updated: {self._traffic_load}")
     
     def initialize_topology(self) -> NetworkTopology:
         """Initialize a mock network topology."""
@@ -1029,34 +1039,112 @@ class MockNetworkSimulator(BaseNetworkSimulator):
                 
                 import random
                 
-                # Generate realistic mock metrics based on traffic state
+                # Generate parameter-aware KPI metrics based on current network config
                 if self.traffic_active and self._traffic_start_time:
-                    # Simulate traffic-dependent metrics
-                    traffic_duration = (current_time - self._traffic_start_time).total_seconds()
-                    
-                    # Throughput varies based on traffic patterns
-                    base_throughput = 25.0 + 15.0 * random.random()  # 25-40 Mbps base
-                    traffic_factor = 1.0 + 0.3 * random.random()  # Traffic boost
-                    throughput = base_throughput * traffic_factor
-                    
-                    # Latency increases with traffic load
-                    base_latency = 15.0 + 10.0 * random.random()  # 15-25 ms base
-                    load_factor = throughput / 50.0  # Normalize by max expected throughput
-                    latency = base_latency * (1.0 + load_factor * 0.5)
-                    
-                    # Packet loss correlates with high utilization
-                    utilization = 40.0 + 45.0 * random.random()  # 40-85% utilization
-                    if utilization > 75.0:
-                        packet_loss = random.uniform(0.5, 3.0)  # Higher loss at high utilization
-                    else:
-                        packet_loss = random.uniform(0.0, 1.0)  # Low loss normally
+                    p = self.current_parameters
+
+                    # --- Scheduling algorithm effect on latency/loss ---
+                    sched_enodeb = (p.scheduling_algorithm or {}).get('enodeb', 'WFQ')
+                    sched_core   = (p.scheduling_algorithm or {}).get('core_router', 'WFQ')
+                    sched_profiles = {
+                        'FIFO': {'lat_mult': 1.20, 'loss_mult': 1.30, 'tx_mult': 0.92},
+                        'WFQ':  {'lat_mult': 1.00, 'loss_mult': 1.00, 'tx_mult': 1.00},
+                        'PQ':   {'lat_mult': 0.85, 'loss_mult': 0.80, 'tx_mult': 1.05},
+                        'RR':   {'lat_mult': 1.05, 'loss_mult': 0.90, 'tx_mult': 0.98},
+                    }
+                    sp_e = sched_profiles.get(sched_enodeb, sched_profiles['WFQ'])
+                    sp_c = sched_profiles.get(sched_core,   sched_profiles['WFQ'])
+                    lat_mult  = (sp_e['lat_mult']  + sp_c['lat_mult'])  / 2
+                    loss_mult = (sp_e['loss_mult'] + sp_c['loss_mult']) / 2
+                    tx_mult   = (sp_e['tx_mult']   + sp_c['tx_mult'])   / 2
+
+                    # --- Bandwidth + per-UE traffic load ---
+                    bw = p.bandwidth or {}
+                    bw_ue1  = bw.get('ue1_enodeb',  10.0)
+                    bw_core = bw.get('enodeb_core', 100.0)
+                    bw_srv  = bw.get('core_server',  50.0)
+                    bw_ue2  = bw.get('ue2_server',   20.0)
+
+                    ue1_load = self._traffic_load.get('ue1', 0.60)
+                    ue2_load = self._traffic_load.get('ue2', 0.40)
+
+                    demand1 = bw_ue1 * ue1_load
+                    demand2 = bw_ue2 * ue2_load
+
+                    bottleneck1 = min(bw_ue1, bw_core, bw_srv)
+                    bottleneck2 = min(bw_ue2, bw_srv)
+                    actual_tx1  = min(demand1, bottleneck1)
+                    actual_tx2  = min(demand2, bottleneck2)
+
+                    # Per-path utilization — use WORST path (bottleneck-aware)
+                    # This ensures a single saturated link (e.g. UE1=1 Mbps) shows up
+                    # even when another path is healthy.
+                    util_path1 = min(demand1 / bottleneck1, 1.0) if bottleneck1 > 0 else 1.0
+                    util_path2 = min(demand2 / bottleneck2, 1.0) if bottleneck2 > 0 else 1.0
+                    raw_util   = max(util_path1, util_path2)  # worst-case path
+
+                    # --- Queue depth effect ---
+                    qs = p.queue_size or {}
+                    avg_q = (
+                        qs.get('ue1', 100) + qs.get('enodeb', 200) +
+                        qs.get('core_router', 150) + qs.get('server', 100)
+                    ) / 4.0
+                    q_norm = min(avg_q / 500.0, 1.0)
+
+                    # --- Throughput (total goodput) ---
+                    goodput    = (actual_tx1 + actual_tx2) * tx_mult
+                    noise_tx   = 1.0 + (random.random() - 0.5) * 0.06
+                    throughput = max(goodput * noise_tx, 0.1)
+
+                    # --- Utilization (0-100, worst-path) ---
+                    noise_u     = 1.0 + (random.random() - 0.5) * 0.04
+                    utilization = min(raw_util * 100.0 * noise_u, 100.0)
+
+                    # --- Latency (driven by worst-path congestion) ---
+                    # Determine the bottleneck link BW for the congested path
+                    congested_bw = bw_ue1 if util_path1 >= util_path2 else bw_ue2
+                    congestion   = max(0.0, (raw_util - 0.75) / 0.25) ** 2 * 60 if raw_util > 0.75 else 0.0
+                    buf_bloat    = q_norm * 15.0 * raw_util
+                    base_lat     = 8.0 + (20.0 / (congested_bw / 10.0 + 1.0)) + congestion + buf_bloat
+                    noise_lat    = 1.0 + (random.random() - 0.5) * 0.05
+                    latency      = min(base_lat * lat_mult * noise_lat, 300.0)
+
+                    # --- Packet loss (worst-path overflow) ---
+                    overflow_p1  = max(0.0, (util_path1 - 0.85) / 0.15) if util_path1 > 0.85 else 0.0
+                    overflow_p2  = max(0.0, (util_path2 - 0.85) / 0.15) if util_path2 > 0.85 else 0.0
+                    overflow     = max(overflow_p1, overflow_p2)
+                    base_loss    = overflow * 8.0 * (1.0 - q_norm * 0.7)
+                    noise_ls     = 1.0 + (random.random() - 0.5) * 0.1
+                    packet_loss  = min(max(base_loss * loss_mult * noise_ls, 0.0), 15.0)
+
                 else:
                     # No traffic - minimal metrics
-                    throughput = random.uniform(0.5, 2.0)  # Minimal background traffic
-                    latency = random.uniform(8.0, 15.0)    # Low latency
-                    packet_loss = random.uniform(0.0, 0.5) # Very low loss
-                    utilization = random.uniform(5.0, 20.0) # Low utilization
+                    throughput  = random.uniform(0.5, 2.0)
+                    latency     = random.uniform(8.0, 15.0)
+                    packet_loss = random.uniform(0.0, 0.3)
+                    utilization = random.uniform(5.0, 15.0)
                 
+                # Identify the bottleneck node based on which path is most congested
+                # util_path1 = UE1 path (ue1 -> enodeb -> core_router -> server)
+                # util_path2 = UE2 path (ue2 -> server)
+                if not self.traffic_active:
+                    bottleneck_node = 'core_router'
+                elif util_path1 >= util_path2:
+                    # UE1 path is the bottleneck -- find narrowest link
+                    bw_vals = {
+                        'ue1':         self.current_parameters.bandwidth.get('ue1_enodeb',  10.0),
+                        'enodeb':      self.current_parameters.bandwidth.get('enodeb_core', 100.0),
+                        'core_router': self.current_parameters.bandwidth.get('core_server',  50.0),
+                    }
+                    bottleneck_node = min(bw_vals, key=bw_vals.get)
+                else:
+                    # UE2 path is the bottleneck
+                    bw_vals = {
+                        'ue2':    self.current_parameters.bandwidth.get('ue2_server', 20.0),
+                        'server': self.current_parameters.bandwidth.get('core_server', 50.0),
+                    }
+                    bottleneck_node = min(bw_vals, key=bw_vals.get)
+
                 # Create KPI metrics
                 metrics = KPIMetrics(
                     timestamp=current_time,
@@ -1064,7 +1152,7 @@ class MockNetworkSimulator(BaseNetworkSimulator):
                     latency=latency,
                     packet_loss=packet_loss,
                     utilization=utilization,
-                    node_id='core_router'
+                    node_id=bottleneck_node
                 )
                 
                 # Store metrics in history for aggregation
