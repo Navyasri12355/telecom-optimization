@@ -32,16 +32,16 @@ The simulation engine uses a **bottleneck-aware, physics-accurate KPI model** ra
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                   Browser (Frontend)                  │
+│                   Browser (Frontend)                 │
 │   index.html · script.js · style.css                 │
 │   Live charts · Topology view · Parameter controls   │
 └─────────────────────┬────────────────────────────────┘
                       │ REST (JSON)
                       │ http://localhost:5050/api/*
 ┌─────────────────────▼────────────────────────────────┐
-│               Flask Backend  (backend/api.py)         │
+│               Flask Backend  (backend/api.py)        │
 │   /api/start  /api/stop  /api/kpis  /api/parameters  │
-│   /api/topology  /api/aggregated  /api/log            │
+│   /api/topology  /api/aggregated  /api/log           │
 └──────┬──────────────────────────┬────────────────────┘
        │                          │
 ┌──────▼──────────┐    ┌──────────▼──────────────────┐
@@ -63,22 +63,22 @@ UE1 ──(10 Mbps)── eNodeB ──(100 Mbps)── CoreRouter ──(50 Mbp
 UE2 ────────────────────────────(20 Mbps)─────────────────────────────┘
 ```
 
-| Node | Type | Role |
-|---|---|---|
-| `ue1` | UE | Mobile device on the access network |
-| `ue2` | UE | Mobile device with a direct server path |
-| `enodeb` | eNodeB | LTE/5G base station |
-| `core_router` | CoreRouter | Backbone routing node |
-| `server` | Server | Application / content server |
+| Node          | Type       | Role                                    |
+| ------------- | ---------- | --------------------------------------- |
+| `ue1`         | UE         | Mobile device on the access network     |
+| `ue2`         | UE         | Mobile device with a direct server path |
+| `enodeb`      | eNodeB     | LTE/5G base station                     |
+| `core_router` | CoreRouter | Backbone routing node                   |
+| `server`      | Server     | Application / content server            |
 
 **Links** and their default bandwidths:
 
-| Link | Default BW |
-|---|---|
-| `ue1_enodeb` | 10 Mbps |
-| `enodeb_core` | 100 Mbps |
-| `core_server` | 50 Mbps |
-| `ue2_server` | 20 Mbps |
+| Link          | Default BW |
+| ------------- | ---------- |
+| `ue1_enodeb`  | 10 Mbps    |
+| `enodeb_core` | 100 Mbps   |
+| `core_server` | 50 Mbps    |
+| `ue2_server`  | 20 Mbps    |
 
 ---
 
@@ -98,14 +98,14 @@ UE2 ─────────────────────────�
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Backend API | Python 3.9+, Flask 2.3, Flask-CORS |
-| Simulation | Custom Python simulator (Mininet-compatible) |
+| Layer             | Technology                                                                     |
+| ----------------- | ------------------------------------------------------------------------------ |
+| Backend API       | Python 3.9+, Flask 2.3, Flask-CORS                                             |
+| Simulation        | Custom Python simulator (Mininet-compatible)                                   |
 | Anomaly Detection | scikit-learn (IsolationForest, OneClassSVM), TensorFlow (optional Autoencoder) |
-| Numerics | NumPy, SciPy, pandas, statsmodels |
-| Frontend | Vanilla HTML5 / CSS3 / JavaScript (no build step) |
-| Testing | pytest |
+| Numerics          | NumPy, SciPy, pandas, statsmodels                                              |
+| Frontend          | Vanilla HTML5 / CSS3 / JavaScript (no build step)                              |
+| Testing           | pytest                                                                         |
 
 ---
 
@@ -188,18 +188,18 @@ Click **▶ Start Simulation** to initialise the network topology and begin the 
 
 All endpoints return JSON. Base URL: `http://localhost:5050`
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Service health check |
-| `GET` | `/api/status` | Simulation running state, traffic active, KPI availability |
-| `POST` | `/api/start` | Initialise topology, start traffic & background loop |
-| `POST` | `/api/stop` | Stop simulation and background loop |
-| `GET` | `/api/kpis` | Latest KPI snapshot + any active anomalies |
-| `GET` | `/api/topology` | Node list, link map, node types, current parameters |
-| `GET` | `/api/parameters` | Current `NetworkParameters` object |
-| `POST` | `/api/parameters` | Update bandwidth / queue size / scheduling / traffic load |
-| `GET` | `/api/aggregated` | Rolling 10-second min/max/avg KPIs |
-| `GET` | `/api/log` | Recent parameter change log (last 50 entries) |
+| Method | Endpoint          | Description                                                |
+| ------ | ----------------- | ---------------------------------------------------------- |
+| `GET`  | `/api/health`     | Service health check                                       |
+| `GET`  | `/api/status`     | Simulation running state, traffic active, KPI availability |
+| `POST` | `/api/start`      | Initialise topology, start traffic & background loop       |
+| `POST` | `/api/stop`       | Stop simulation and background loop                        |
+| `GET`  | `/api/kpis`       | Latest KPI snapshot + any active anomalies                 |
+| `GET`  | `/api/topology`   | Node list, link map, node types, current parameters        |
+| `GET`  | `/api/parameters` | Current `NetworkParameters` object                         |
+| `POST` | `/api/parameters` | Update bandwidth / queue size / scheduling / traffic load  |
+| `GET`  | `/api/aggregated` | Rolling 10-second min/max/avg KPIs                         |
+| `GET`  | `/api/log`        | Recent parameter change log (last 50 entries)              |
 
 ### Example: update parameters
 
@@ -219,15 +219,15 @@ curl -X POST http://localhost:5050/api/parameters \
 
 ### Default network parameters
 
-| Parameter | Default |
-|---|---|
-| `ue1_enodeb` bandwidth | 10 Mbps |
-| `enodeb_core` bandwidth | 100 Mbps |
-| `core_server` bandwidth | 50 Mbps |
-| `ue2_server` bandwidth | 20 Mbps |
-| Queue size (all nodes) | 100–200 packets |
-| eNodeB scheduling | WFQ |
-| CoreRouter scheduling | WFQ |
+| Parameter               | Default         |
+| ----------------------- | --------------- |
+| `ue1_enodeb` bandwidth  | 10 Mbps         |
+| `enodeb_core` bandwidth | 100 Mbps        |
+| `core_server` bandwidth | 50 Mbps         |
+| `ue2_server` bandwidth  | 20 Mbps         |
+| Queue size (all nodes)  | 100–200 packets |
+| eNodeB scheduling       | WFQ             |
+| CoreRouter scheduling   | WFQ             |
 
 ### Bandwidth constraints (validated server-side)
 
@@ -237,12 +237,12 @@ curl -X POST http://localhost:5050/api/parameters \
 
 ### Supported scheduling algorithms
 
-| Algorithm | Effect vs WFQ baseline |
-|---|---|
-| `FIFO` | +20% latency, +30% packet loss, −8% throughput |
-| `WFQ` | Baseline (1×) |
-| `PQ` | −15% latency, −20% packet loss, +5% throughput |
-| `RR` | +5% latency, −10% packet loss, −2% throughput |
+| Algorithm | Effect vs WFQ baseline                         |
+| --------- | ---------------------------------------------- |
+| `FIFO`    | +20% latency, +30% packet loss, −8% throughput |
+| `WFQ`     | Baseline (1×)                                  |
+| `PQ`      | −15% latency, −20% packet loss, +5% throughput |
+| `RR`      | +5% latency, −10% packet loss, −2% throughput  |
 
 ---
 
@@ -252,12 +252,12 @@ The `AnomalyAgent` uses two detection layers:
 
 ### Rule-based (always active)
 
-| Anomaly Type | Threshold |
-|---|---|
-| `PACKET_LOSS` | > 5% |
-| `LATENCY_SPIKE` | > 100 ms |
-| `THROUGHPUT_DROP` | > 30% relative drop vs 5-sample rolling mean |
-| `UTILIZATION_SPIKE` | > 90% |
+| Anomaly Type        | Threshold                                    |
+| ------------------- | -------------------------------------------- |
+| `PACKET_LOSS`       | > 5%                                         |
+| `LATENCY_SPIKE`     | > 100 ms                                     |
+| `THROUGHPUT_DROP`   | > 30% relative drop vs 5-sample rolling mean |
+| `UTILIZATION_SPIKE` | > 90%                                        |
 
 ### ML-based (activates after 50 samples)
 
@@ -267,12 +267,12 @@ The `AnomalyAgent` uses two detection layers:
 
 All anomalies are classified with a severity level:
 
-| Severity | Colour |
-|---|---|
-| `LOW` | Blue |
-| `MEDIUM` | Yellow |
-| `HIGH` | Orange |
-| `CRITICAL` | Red |
+| Severity   | Colour |
+| ---------- | ------ |
+| `LOW`      | Blue   |
+| `MEDIUM`   | Yellow |
+| `HIGH`     | Orange |
+| `CRITICAL` | Red    |
 
 The affected node reported with each anomaly reflects the actual bottleneck node identified by the KPI engine, not a hardcoded default.
 
