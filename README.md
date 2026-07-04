@@ -1,4 +1,4 @@
-# TeleOptAI — AI-Assisted Network Optimization Dashboard
+# AI-Assisted Network Optimization Dashboard
 
 > A physics-accurate telecom network simulation with real-time anomaly detection and an interactive web dashboard for monitoring and controlling network KPIs.
 
