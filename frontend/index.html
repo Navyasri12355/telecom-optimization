@@ -56,6 +56,19 @@
     <!-- ======================== LEFT: Controls ======================== -->
     <aside class="sidebar">
 
+      <!-- Control Mode -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🤖</span>
+          <h3>Control Mode</h3>
+        </div>
+        <div class="mode-toggle" role="tablist" aria-label="Control mode">
+          <button class="mode-btn active" id="mode-manual" type="button" onclick="setControlMode(false)">Manual Config</button>
+          <button class="mode-btn" id="mode-auto" type="button" onclick="setControlMode(true)">Automated Allocation</button>
+        </div>
+        <div class="mode-note" id="modeNote">Manual control is enabled. Use the sliders and presets to configure the scenario.</div>
+      </div>
+
       <!-- Preset Scenarios -->
       <div class="card">
         <div class="card-header">

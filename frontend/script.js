@@ -1,6 +1,6 @@
 /* TeleOptAI - Frontend Script (API mode) */
 var API='http://localhost:5050/api';
-var state={running:false,simSeconds:0,historyLen:60,_prevKpi:null,anomalies:[],aiCooldown:0,pendingParams:null,sendTimer:null,
+var state={running:false,automationMode:false,simSeconds:0,historyLen:60,_prevKpi:null,anomalies:[],aiCooldown:0,pendingParams:null,sendTimer:null,
   params:{bandwidth:{ue1_enodeb:10,enodeb_core:100,core_server:50,ue2_server:20},queue_size:{ue1:100,ue2:100,enodeb:200,core_router:150,server:100},scheduling:{enodeb:'WFQ',core_router:'WFQ'},traffic_load:{ue1:0.60,ue2:0.40}},
   kpi:{throughput:0,latency:0,loss:0,util:0},
   linkSat:{ue1_enodeb:0,enodeb_core:0,core_server:0,ue2_server:0}
@@ -15,15 +15,80 @@ function computeLinkSat(){
   var p=state.params,d1=p.traffic_load.ue1*p.bandwidth.ue1_enodeb,d2=p.traffic_load.ue2*p.bandwidth.ue2_server;
   return{ue1_enodeb:p.traffic_load.ue1,enodeb_core:Math.min(d1/p.bandwidth.enodeb_core,1),core_server:Math.min((d1+d2)/p.bandwidth.core_server,1),ue2_server:p.traffic_load.ue2};
 }
+function manualControlsLocked(){return state.running&&state.automationMode;}
+function presetControlsLocked(){return false;}
+function snapshotParams(){
+  return{
+    bandwidth:Object.assign({},state.params.bandwidth),
+    queue_size:Object.assign({},state.params.queue_size),
+    scheduling_algorithm:Object.assign({},state.params.scheduling),
+    traffic_load:Object.assign({},state.params.traffic_load)
+  };
+}
+function syncControlModeUI(){
+  var manualBtn=document.getElementById('mode-manual'),autoBtn=document.getElementById('mode-auto'),note=document.getElementById('modeNote');
+  if(manualBtn)manualBtn.classList.toggle('active',!state.automationMode);
+  if(autoBtn)autoBtn.classList.toggle('active',state.automationMode);
+  if(note)note.textContent=state.automationMode
+    ?'Automated allocation is enabled. Use scenario presets to seed the issue, and the orchestrator will adjust resources dynamically while the simulation runs.'
+    :'Manual control is enabled. Use the sliders and presets to configure the scenario.';
+  document.querySelectorAll('.slider,.algo-pill,.preset-btn').forEach(function(el){
+    var lock=el.classList.contains('preset-btn') ? presetControlsLocked() : manualControlsLocked();
+    el.disabled=lock;
+    el.classList.toggle('disabled-control',lock);
+  });
+}
+async function setControlMode(enabled){
+  state.automationMode=!!enabled;
+  if(state.automationMode)state.pendingParams=null;
+  syncControlModeUI();
+  await apiPost('/control-mode',{automation_enabled:state.automationMode});
+}
 async function apiPost(ep,body){
   try{var r=await fetch(API+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});return r.ok?await r.json():null;}catch(e){return null;}
 }
 async function apiGet(ep){
   try{var r=await fetch(API+ep);return r.ok?await r.json():null;}catch(e){return null;}
 }
+function applyBackendParameters(params){
+  if(!params)return;
+  state.params.bandwidth=Object.assign({},state.params.bandwidth,params.bandwidth||{});
+  state.params.queue_size=Object.assign({},state.params.queue_size,params.queue_size||{});
+  if(params.scheduling_algorithm){
+    state.params.scheduling={
+      enodeb:params.scheduling_algorithm.enodeb||state.params.scheduling.enodeb,
+      core_router:params.scheduling_algorithm.core_router||state.params.scheduling.core_router
+    };
+  }
+
+  var bwLabels={ue1_enodeb:'bw-ue1-val',enodeb_core:'bw-enodeb-val',core_server:'bw-core-val',ue2_server:'bw-ue2-val'};
+  Object.keys(bwLabels).forEach(function(link){
+    var val=state.params.bandwidth[link];
+    var inputId=link==='ue1_enodeb'?'bw-ue1':link==='enodeb_core'?'bw-enodeb':link==='core_server'?'bw-core':'bw-ue2';
+    var input=document.getElementById(inputId),label=document.getElementById(bwLabels[link]);
+    if(input)input.value=val;
+    if(label)label.textContent=val+' Mbps';
+  });
+
+  var queueLabels={ue1:'q-ue1-val',ue2:'q-ue2-val',enodeb:'q-enodeb-val',core_router:'q-core-val',server:'q-server-val'};
+  Object.keys(queueLabels).forEach(function(node){
+    var val=state.params.queue_size[node];
+    var inputId=node==='ue1'?'q-ue1':node==='ue2'?'q-ue2':node==='enodeb'?'q-enodeb':node==='core_router'?'q-core':'q-server';
+    var input=document.getElementById(inputId),label=document.getElementById(queueLabels[node]);
+    if(input)input.value=val;
+    if(label)label.textContent=val;
+  });
+
+  ['enodeb','core_router'].forEach(function(node){
+    var algo=state.params.scheduling[node];
+    document.querySelectorAll('.algo-pills[data-node="'+node+'"] .algo-pill').forEach(function(p){
+      p.classList.toggle('active',p.dataset.algo===algo);
+    });
+  });
+}
 function scheduleSendParams(){clearTimeout(state.sendTimer);state.sendTimer=setTimeout(flushParams,400);}
 async function flushParams(){
-  if(!state.running||!state.pendingParams)return;
+  if(!state.running||!state.pendingParams||manualControlsLocked())return;
   var res=await apiPost('/parameters',{
     bandwidth:state.pendingParams.bandwidth||{},
     queue_size:state.pendingParams.queue_size||{},
@@ -36,6 +101,11 @@ async function flushParams(){
 async function pollKPIs(){
   var data=await apiGet('/kpis');
   if(!data||!data.kpi)return;
+  var params=await apiGet('/parameters');
+  if(params&&params.parameters){
+    applyBackendParameters(params.parameters);
+    state.linkSat=computeLinkSat();
+  }
   var kpi=data.kpi;
   state._prevKpi=Object.assign({},state.kpi);
   state.kpi={throughput:kpi.throughput,latency:kpi.latency,loss:kpi.packet_loss,util:kpi.utilization};
@@ -234,24 +304,29 @@ document.getElementById('startStopBtn').addEventListener('click',async function(
   var btn=document.getElementById('startStopBtn');
   if(!state.running){
     updateStatusBar('Connecting to backend...','');
-    var res=await apiPost('/start',{});
+    var res=await apiPost('/start',{automation_enabled:state.automationMode,initial_parameters:snapshotParams()});
     if(!res){updateStatusBar('Backend unreachable -- start python backend/api.py','error');return;}
     state.running=true;state.simSeconds=0;
+    var startParams=await apiGet('/parameters');
+    if(startParams&&startParams.parameters){applyBackendParameters(startParams.parameters);state.linkSat=computeLinkSat();}
     state.pollTimer=setInterval(pollKPIs,1000);
     btn.textContent='Stop Simulation';btn.classList.add('running');
     updateStatusBar('Simulation Running','running');spawnPackets();
+    syncControlModeUI();
     addLogEntry('Simulation <strong>started</strong>');
   } else {
     clearInterval(state.pollTimer);state.running=false;
     await apiPost('/stop',{});
     btn.textContent='Start Simulation';btn.classList.remove('running');
     updateStatusBar('Simulation Stopped','');
+    syncControlModeUI();
     addLogEntry('Simulation <strong>stopped</strong>');
   }
 });
 
 /* === Parameter Controls === */
 function updateBandwidth(link,value){
+  if(manualControlsLocked())return;
   var val=parseFloat(value),old=state.params.bandwidth[link];
   state.params.bandwidth[link]=val;
   var labels={ue1_enodeb:'bw-ue1-val',enodeb_core:'bw-enodeb-val',core_server:'bw-core-val',ue2_server:'bw-ue2-val'};
@@ -262,6 +337,7 @@ function updateBandwidth(link,value){
   scheduleSendParams();clearPresetActive();
 }
 function updateQueue(node,value){
+  if(manualControlsLocked())return;
   var val=parseInt(value),old=state.params.queue_size[node];
   state.params.queue_size[node]=val;
   var labels={ue1:'q-ue1-val',enodeb:'q-enodeb-val',core_router:'q-core-val',server:'q-server-val'};
@@ -272,13 +348,19 @@ function updateQueue(node,value){
   scheduleSendParams();clearPresetActive();
 }
 function updateTrafficLoad(ue,value){
+  if(manualControlsLocked())return;
   var val=parseInt(value);state.params.traffic_load[ue]=val/100;
   var labels={ue1:'load-ue1-val',ue2:'load-ue2-val'};
   document.getElementById(labels[ue]).textContent=val+'%';
+  if(!state.pendingParams)state.pendingParams={};
+  if(!state.pendingParams.traffic_load)state.pendingParams.traffic_load={};
+  state.pendingParams.traffic_load[ue]=val/100;
+  scheduleSendParams();
   addLogEntry('Traffic <strong>'+ue.toUpperCase()+'</strong>: <span class="log-new">'+val+'% load</span>');
   clearPresetActive();
 }
 function updateScheduling(node,algo,btn){
+  if(manualControlsLocked())return;
   var old=state.params.scheduling[node];state.params.scheduling[node]=algo;
   btn.closest('.algo-pills').querySelectorAll('.algo-pill').forEach(function(p){p.classList.remove('active');});
   btn.classList.add('active');
@@ -322,20 +404,25 @@ function applyPreset(name){
   document.querySelectorAll('.preset-btn').forEach(function(b){b.classList.remove('active');});
   document.getElementById('preset-'+name).classList.add('active');
   if(state.running){
-    state.pendingParams={
-      bandwidth:Object.assign({},pr.bandwidth),
-      queue_size:Object.assign({},pr.queue_size),
-      scheduling:Object.assign({},pr.scheduling),
-      traffic_load:Object.assign({},pr.traffic_load)
-    };
-    scheduleSendParams();
+    if(state.automationMode){
+      apiPost('/parameters',Object.assign({scenario_seed:true},snapshotParams())).then(function(res){
+        if(res&&res.changes)res.changes.forEach(function(c){addLogEntry(c);});
+      });
+    } else {
+      state.pendingParams=snapshotParams();
+      scheduleSendParams();
+    }
   }
-  addLogEntry('Preset: <strong>'+name.toUpperCase()+'</strong>');
+  addLogEntry('Preset: <strong>'+name.toUpperCase()+'</strong>'+(state.automationMode ? ' <span class="log-new">(automation seeding)</span>' : ''));
 }
 
 /* === Init === */
 window.addEventListener('DOMContentLoaded',function(){
   initTopology();initSparklines();initCharts();
+  apiGet('/control-mode').then(function(res){
+    if(res&&typeof res.automation_enabled==='boolean')state.automationMode=res.automation_enabled;
+    syncControlModeUI();
+  });
   updateStatusBar('Ready -- Start simulation to begin','');
   updateKPICards();updateLinkBars();
 });

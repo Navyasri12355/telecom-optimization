@@ -228,6 +228,37 @@ body {
 .preset-btn.active { background: rgba(99,102,241,0.15); border-color: var(--indigo); color: var(--indigo-light); }
 .preset-icon { font-size: 18px; }
 
+/* ======================== Control Mode Toggle ======================== */
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mode-btn {
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mode-btn:hover { background: rgba(99,102,241,0.1); border-color: var(--indigo); color: var(--text-primary); }
+.mode-btn.active { background: rgba(6,182,212,0.16); border-color: var(--cyan); color: var(--cyan-light); }
+.mode-note { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+
+.disabled-control {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
+.slider.disabled-control::-webkit-slider-thumb { box-shadow: none; }
+
 /* ======================== Sliders / Params ======================== */
 .param-group { display: flex; flex-direction: column; gap: 12px; }
 .param-row { display: flex; flex-direction: column; gap: 4px; }
