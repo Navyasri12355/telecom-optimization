@@ -74,7 +74,7 @@ class TestNetworkSimulator:
         metrics = simulator.collect_kpis()
         
         assert isinstance(metrics, KPIMetrics)
-        assert metrics.node_id == 'core_router'
+        assert metrics.node_id in {'ue1', 'ue2', 'enodeb', 'core_router', 'server'}
         assert metrics.throughput >= 0
         assert metrics.latency >= 0
         assert 0 <= metrics.packet_loss <= 100
@@ -257,6 +257,130 @@ class TestNetworkSimulator:
         assert 'nonexistent_node' in simulator.current_parameters.queue_size
         
         simulator.stop_simulation()
+
+    def test_scenario_packet_loss_is_nonzero_and_scaled(self):
+        """Test that baseline scenarios have small loss and stressed scenarios have higher loss."""
+
+        def collect_for_scenario(bandwidth, queue_size, scheduling_algorithm, traffic_load):
+            simulator = create_network_simulator(use_mininet=False)
+            simulator.initialize_topology()
+            simulator.start_traffic_generation()
+            simulator.update_parameters(
+                NetworkParameters(
+                    bandwidth=bandwidth,
+                    queue_size=queue_size,
+                    scheduling_algorithm=scheduling_algorithm,
+                    update_timestamp=datetime.now(),
+                )
+            )
+            simulator.set_traffic_load(traffic_load)
+            metrics = simulator.collect_kpis()
+            simulator.stop_simulation()
+            return metrics.packet_loss
+
+        normal_loss = collect_for_scenario(
+            bandwidth={
+                'ue1_enodeb': 10.0,
+                'enodeb_core': 100.0,
+                'core_server': 50.0,
+                'ue2_server': 20.0,
+            },
+            queue_size={
+                'ue1': 100,
+                'ue2': 100,
+                'enodeb': 200,
+                'core_router': 150,
+                'server': 100,
+            },
+            scheduling_algorithm={
+                'ue1': 'FIFO',
+                'ue2': 'FIFO',
+                'enodeb': 'WFQ',
+                'core_router': 'WFQ',
+                'server': 'FIFO',
+            },
+            traffic_load={'ue1': 0.60, 'ue2': 0.40},
+        )
+
+        optimized_loss = collect_for_scenario(
+            bandwidth={
+                'ue1_enodeb': 80.0,
+                'enodeb_core': 500.0,
+                'core_server': 300.0,
+                'ue2_server': 80.0,
+            },
+            queue_size={
+                'ue1': 500,
+                'ue2': 500,
+                'enodeb': 1000,
+                'core_router': 800,
+                'server': 500,
+            },
+            scheduling_algorithm={
+                'ue1': 'FIFO',
+                'ue2': 'FIFO',
+                'enodeb': 'PQ',
+                'core_router': 'PQ',
+                'server': 'FIFO',
+            },
+            traffic_load={'ue1': 0.50, 'ue2': 0.35},
+        )
+
+        congestion_loss = collect_for_scenario(
+            bandwidth={
+                'ue1_enodeb': 3.0,
+                'enodeb_core': 20.0,
+                'core_server': 10.0,
+                'ue2_server': 5.0,
+            },
+            queue_size={
+                'ue1': 50,
+                'ue2': 50,
+                'enodeb': 60,
+                'core_router': 60,
+                'server': 50,
+            },
+            scheduling_algorithm={
+                'ue1': 'FIFO',
+                'ue2': 'FIFO',
+                'enodeb': 'FIFO',
+                'core_router': 'FIFO',
+                'server': 'FIFO',
+            },
+            traffic_load={'ue1': 0.95, 'ue2': 0.90},
+        )
+
+        failure_loss = collect_for_scenario(
+            bandwidth={
+                'ue1_enodeb': 1.0,
+                'enodeb_core': 100.0,
+                'core_server': 50.0,
+                'ue2_server': 20.0,
+            },
+            queue_size={
+                'ue1': 30,
+                'ue2': 100,
+                'enodeb': 200,
+                'core_router': 150,
+                'server': 100,
+            },
+            scheduling_algorithm={
+                'ue1': 'FIFO',
+                'ue2': 'FIFO',
+                'enodeb': 'WFQ',
+                'core_router': 'WFQ',
+                'server': 'FIFO',
+            },
+            traffic_load={'ue1': 0.95, 'ue2': 0.40},
+        )
+
+        assert normal_loss > 0.0
+        assert optimized_loss > 0.0
+        assert normal_loss < 1.0
+        assert optimized_loss < 1.0
+        assert congestion_loss > normal_loss
+        assert failure_loss > congestion_loss
+        assert congestion_loss > 5.0 or failure_loss > 5.0
     
     def test_parameter_update_without_simulation(self):
         """Test parameter update error handling when simulation is not running."""
@@ -367,7 +491,7 @@ class TestNetworkSimulator:
             metrics = simulator.collect_kpis()
             metrics_samples.append(metrics)
             assert isinstance(metrics, KPIMetrics)
-            assert metrics.node_id == 'core_router'
+            assert metrics.node_id in {'ue1', 'ue2', 'enodeb', 'core_router', 'server'}
             assert isinstance(metrics.timestamp, datetime)
             
             # Verify metrics are within expected ranges

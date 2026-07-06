@@ -1109,13 +1109,26 @@ class MockNetworkSimulator(BaseNetworkSimulator):
                     noise_lat    = 1.0 + (random.random() - 0.5) * 0.05
                     latency      = min(base_lat * lat_mult * noise_lat, 300.0)
 
-                    # --- Packet loss (worst-path overflow) ---
-                    overflow_p1  = max(0.0, (util_path1 - 0.85) / 0.15) if util_path1 > 0.85 else 0.0
-                    overflow_p2  = max(0.0, (util_path2 - 0.85) / 0.15) if util_path2 > 0.85 else 0.0
+                    # --- Packet loss (baseline + worst-path overflow) ---
+                    # Keep a small non-zero floor under healthy traffic so the demo does not
+                    # look artificially perfect, while overflow still dominates during stress.
+                    queue_relief = 1.0 - q_norm
+                    baseline_loss = (
+                        0.08
+                        + (0.14 * queue_relief)
+                        + (0.06 * max(0.0, raw_util - 0.35))
+                    ) * loss_mult
+                    bottleneck_bw = min(bw_ue1, bw_ue2)
+                    # Treat very low bandwidth as a hard failure mode rather than
+                    # just another congestion point. This keeps the failure preset
+                    # visibly worse than the congestion preset in the demo.
+                    link_fragility = 4.0 if bottleneck_bw <= 1.5 else 0.0
+                    overflow_p1  = max(0.0, (util_path1 - 0.80) / 0.20) if util_path1 > 0.80 else 0.0
+                    overflow_p2  = max(0.0, (util_path2 - 0.80) / 0.20) if util_path2 > 0.80 else 0.0
                     overflow     = max(overflow_p1, overflow_p2)
-                    base_loss    = overflow * 8.0 * (1.0 - q_norm * 0.7)
-                    noise_ls     = 1.0 + (random.random() - 0.5) * 0.1
-                    packet_loss  = min(max(base_loss * loss_mult * noise_ls, 0.0), 15.0)
+                    overflow_loss = overflow * 10.0 * (1.0 - q_norm * 0.7)
+                    noise_ls     = 1.0 + (random.random() - 0.5) * 0.08
+                    packet_loss  = min(max((baseline_loss + link_fragility + overflow_loss) * noise_ls, 0.0), 15.0)
 
                 else:
                     # No traffic - minimal metrics
