@@ -106,8 +106,8 @@ Simulation (src/simulation/)
 
 ```text
 UE1 --(10 Mbps)-- eNodeB --(100 Mbps)-- CoreRouter --(50 Mbps)-- Server
-                                                          |
-UE2 ---------------------------(20 Mbps)-------------------+
+                                                                   |
+UE2 ---------------------------(20 Mbps)---------------------------+
 ```
 
 | Node | Type | Role |
