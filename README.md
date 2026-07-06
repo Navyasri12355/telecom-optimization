@@ -1,158 +1,143 @@
 # AI-Assisted Network Optimization Dashboard
 
-> A physics-accurate telecom network simulation with real-time anomaly detection and an interactive web dashboard for monitoring and controlling network KPIs.
+TeleOptAI is a portfolio project that combines a telecom network simulator, a Flask backend, and a browser dashboard to demonstrate AI-assisted network monitoring and resource optimization.
 
----
+It is designed to show how a live telecom workload can be observed, diagnosed, and adjusted in real time through automated control logic. The current implementation focuses on:
+
+- real-time KPI collection for throughput, latency, packet loss, and utilization,
+- anomaly detection for congestion-style conditions,
+- automatic resource adjustment through an orchestrator,
+- manual vs automated control mode switching,
+- scenario presets for normal, congestion, optimized, and link-failure cases.
 
 ## Table of Contents
 
-- [Overview](#overview)
+- [What This Project Does](#what-this-project-does)
 - [Architecture](#architecture)
+- [Core Features](#core-features)
 - [Network Topology](#network-topology)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
+- [Setup Guide](#setup-guide)
 - [API Reference](#api-reference)
-- [Configuration](#configuration)
-- [Anomaly Detection](#anomaly-detection)
-- [KPI Model](#kpi-model)
+- [Scenarios](#scenarios)
+- [KPI and Anomaly Model](#kpi-and-anomaly-model)
+- [Project Structure](#project-structure)
+- [Technology Stack](#technology-stack)
+- [Notes](#notes)
+- [License](#license)
 
----
+## What This Project Does
 
-## Overview
+The project simulates a small telecom topology with two UEs, an eNodeB, a core router, and a server. The simulator computes KPIs from link bandwidth, queue sizes, scheduling policy, and traffic load rather than generating random values.
 
-TeleOptAI simulates a 4G/5G-style telecom network and applies AI-driven anomaly detection to continuously monitor network health. Network operators can tune parameters (bandwidth, queue sizes, scheduling algorithms, per-UE traffic load) in real time and immediately observe the impact on KPIs — throughput, latency, packet loss, and utilization — through a live dashboard.
+The dashboard lets you:
 
-The simulation engine uses a **bottleneck-aware, physics-accurate KPI model** rather than random number generation. Every metric is derived from the actual bandwidth constraints, scheduling policy, and traffic demand configured for each link and node.
+- start and stop the simulation,
+- switch between manual configuration and automated allocation,
+- seed the system with scenario presets,
+- watch live KPI charts and topology updates,
+- inspect anomaly alerts and parameter change logs.
 
----
+On the backend, a master orchestrator reads the live KPI stream, applies anomaly detection, generates optimization decisions, and updates the simulator when automation is enabled.
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────┐
-│                   Browser (Frontend)                 │
-│   index.html · script.js · style.css                 │
-│   Live charts · Topology view · Parameter controls   │
-└─────────────────────┬────────────────────────────────┘
-                      │ REST (JSON)
-                      │ http://localhost:5050/api/*
-┌─────────────────────▼────────────────────────────────┐
-│               Flask Backend  (backend/api.py)        │
-│   /api/start  /api/stop  /api/kpis  /api/parameters  │
-│   /api/topology  /api/aggregated  /api/log           │
-└──────┬──────────────────────────┬────────────────────┘
-       │                          │
-┌──────▼──────────┐    ┌──────────▼──────────────────┐
-│ MockNetwork     │    │  AnomalyAgent               │
-│ Simulator       │    │  Rule-based + ML detection  │
-│ (src/simulation)│    │  (src/agents)               │
-└─────────────────┘    └─────────────────────────────┘
+```text
+┌───────────────────────────────────────────────────────────────┐
+│                         Browser UI                            │
+│  frontend/index.html · frontend/script.js · frontend/style.css│
+│  Live KPI cards · charts · topology view · scenario presets   │
+└───────────────────────────────┬───────────────────────────────┘
+                                │ REST / JSON
+                                ▼
+┌────────────────────────────────────────────────────────────────┐
+│                     Flask Backend API                          │
+│                      backend/api.py                            │
+│  /api/start · /api/stop · /api/kpis · /api/parameters          │
+│  /api/control-mode · /api/topology · /api/aggregated · /api/log│
+└───────────────────────┬────────────────────────────────────────┘
+                        │
+        ┌───────────────┴────────────────┬─────────────────┐
+        ▼                                ▼                 ▼
+┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+│ Network Simulator     │   │ Master Orchestrator   │   │ Anomaly Agent         │
+│ src/simulation/       │   │ src/orchestration/    │   │ src/agents/           │
+│ Mock or Mininet path  │   │ KPI -> decision -> act│   │ Rule-based alerts     │
+└───────────────────────┘   └───────────────────────┘   └───────────────────────┘
 ```
 
-The backend runs a **background thread** that calls `collect_kpis()` every second, feeds the result to the `AnomalyAgent`, and stores the latest snapshot. The frontend polls `/api/kpis` every second and updates charts in real time.
+```text
+Frontend (frontend/)
+  index.html · script.js · style.css
+  - control mode toggle
+  - scenario presets
+  - live KPI cards and charts
+  - topology view and change log
 
----
+Backend (backend/api.py)
+  Flask REST API
+  - /api/start, /api/stop
+  - /api/kpis, /api/topology, /api/parameters
+  - /api/control-mode
+  - /api/aggregated, /api/log
+
+Orchestration (src/orchestration/)
+  MasterOrchestrator
+  - collects KPI snapshots
+  - runs anomaly detection
+  - generates optimization decisions
+  - applies resource updates in automated mode
+
+Simulation (src/simulation/)
+  MockNetworkSimulator on Windows/macOS
+  MininetNetworkSimulator on Linux when Mininet is available
+```
+
+## Core Features
+
+- **Live KPI monitoring**: throughput, latency, packet loss, and utilization update every second.
+- **Adaptive automation**: the orchestrator can apply bandwidth and queue adjustments from live KPI pressure.
+- **Manual / automated toggle**: manual sliders are disabled in automated mode, but scenario presets remain usable as seeds.
+- **Scenario presets**: normal, congestion, optimized, and link-failure presets can be selected during a run.
+- **Anomaly detection**: rule-based thresholds trigger alerts for loss, latency, utilization, and throughput drops.
+- **Topology visualization**: animated network view with link saturation feedback.
+- **Audit trail**: parameter changes are logged in the UI and exposed through the API.
 
 ## Network Topology
 
-```
-UE1 ──(10 Mbps)── eNodeB ──(100 Mbps)── CoreRouter ──(50 Mbps)── Server
-                                                                      │
-UE2 ────────────────────────────(20 Mbps)─────────────────────────────┘
-```
-
-| Node          | Type       | Role                                    |
-| ------------- | ---------- | --------------------------------------- |
-| `ue1`         | UE         | Mobile device on the access network     |
-| `ue2`         | UE         | Mobile device with a direct server path |
-| `enodeb`      | eNodeB     | LTE/5G base station                     |
-| `core_router` | CoreRouter | Backbone routing node                   |
-| `server`      | Server     | Application / content server            |
-
-**Links** and their default bandwidths:
-
-| Link          | Default BW |
-| ------------- | ---------- |
-| `ue1_enodeb`  | 10 Mbps    |
-| `enodeb_core` | 100 Mbps   |
-| `core_server` | 50 Mbps    |
-| `ue2_server`  | 20 Mbps    |
-
----
-
-## Features
-
-- **Physics-accurate KPI engine** — throughput, latency, packet loss, and utilization derived from actual link capacities and per-UE traffic loads, not random numbers.
-- **Bottleneck identification** — the narrowest link on the most-congested path is identified every tick and reported as the active bottleneck node.
-- **Scheduling algorithm profiles** — FIFO, WFQ, PQ, and RR each carry distinct latency, loss, and throughput multipliers.
-- **Real-time anomaly detection** — rule-based thresholds (packet loss > 5%, latency > 100 ms, utilization > 90%, throughput drop > 30%) with optional ML models (Isolation Forest, One-Class SVM, Autoencoder).
-- **Live dashboard** — animated topology, KPI time-series charts, severity-coded alert feed, and a parameter control panel — all updating every second.
-- **Dynamic parameter updates** — change any bandwidth, queue size, scheduling algorithm, or traffic load fraction while the simulation is running; the effect on KPIs is immediate.
-- **Parameter change log** — every parameter mutation is timestamped and surfaced in the dashboard's audit panel.
-- **Aggregated metrics** — `/api/aggregated` returns min/max/avg KPIs over a rolling 10-second window.
-- **Mininet-ready** — the `MininetNetworkSimulator` class supports real Mininet topologies on Linux; `MockNetworkSimulator` is used as a portable fallback on Windows / macOS.
-
----
-
-## Tech Stack
-
-| Layer             | Technology                                                                     |
-| ----------------- | ------------------------------------------------------------------------------ |
-| Backend API       | Python 3.9+, Flask 2.3, Flask-CORS                                             |
-| Simulation        | Custom Python simulator (Mininet-compatible)                                   |
-| Anomaly Detection | scikit-learn (IsolationForest, OneClassSVM), TensorFlow (optional Autoencoder) |
-| Numerics          | NumPy, SciPy, pandas, statsmodels                                              |
-| Frontend          | Vanilla HTML5 / CSS3 / JavaScript (no build step)                              |
-| Testing           | pytest                                                                         |
-
----
-
-## Project Structure
-
-```
-telecom-optimization/
-├── backend/
-│   └── api.py                  # Flask REST API; simulation lifecycle endpoints
-├── frontend/
-│   ├── index.html              # Dashboard UI
-│   ├── script.js               # Polling, chart rendering, event handlers
-│   └── style.css               # Dark-mode dashboard styling
-├── src/
-│   ├── models.py               # Dataclasses: KPIMetrics, NetworkParameters, Anomaly, …
-│   ├── interfaces.py           # Abstract base interfaces for simulator & agents
-│   ├── main.py                 # CLI entry-point
-│   ├── agents/
-│   │   ├── anomaly_agent.py    # Rule-based + ML anomaly detection
-│   │   ├── optimization_agent.py
-│   │   └── predictive_agent.py
-│   ├── simulation/
-│   │   └── network_simulator.py  # MockNetworkSimulator & MininetNetworkSimulator
-│   ├── orchestration/
-│   └── telemetry/
-├── config/                     # YAML configuration files
-├── examples/                   # Usage examples
-├── tests/                      # pytest test suite
-├── requirements.txt
-└── setup.py
+```text
+UE1 --(10 Mbps)-- eNodeB --(100 Mbps)-- CoreRouter --(50 Mbps)-- Server
+                                                          |
+UE2 ---------------------------(20 Mbps)-------------------+
 ```
 
----
+| Node | Type | Role |
+| --- | --- | --- |
+| `ue1` | UE | Access-side user equipment |
+| `ue2` | UE | Direct-path user equipment |
+| `enodeb` | eNodeB | Radio access node |
+| `core_router` | CoreRouter | Backbone routing node |
+| `server` | Server | Application/content endpoint |
 
-## Getting Started
+Default link capacities:
 
-### Prerequisites
+| Link | Default BW |
+| --- | --- |
+| `ue1_enodeb` | 10 Mbps |
+| `enodeb_core` | 100 Mbps |
+| `core_server` | 50 Mbps |
+| `ue2_server` | 20 Mbps |
 
-- Python 3.9 or newer
-- (Optional) Mininet — Linux only; the mock simulator works on all platforms
+## Setup Guide
 
-### 1. Clone and create a virtual environment
+### Requirements
+
+- Python 3.8+
+- Windows, macOS, or Linux
+- Optional: Mininet on Linux for the Mininet-backed simulator
+
+### 1. Create and activate a virtual environment
 
 ```bash
-git clone <repo-url>
-cd telecom-optimization
-
 python -m venv venv
 # Windows
 venv\Scripts\activate
@@ -166,7 +151,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **Note:** TensorFlow and Prophet are commented out in `requirements.txt` by default. Uncomment them if you want the Autoencoder-based detection or load forecasting.
+The optional ML packages are commented out in `requirements.txt`. Keep them disabled unless you want TensorFlow-based or forecasting extras.
 
 ### 3. Start the backend
 
@@ -174,126 +159,125 @@ pip install -r requirements.txt
 python backend/api.py
 ```
 
-The API server starts at **http://localhost:5050**.
+The API runs on `http://localhost:5050`.
 
 ### 4. Open the dashboard
 
-Open `frontend/index.html` directly in your browser (no web server required — CORS is enabled for all origins).
+Open `frontend/index.html` directly in a browser. No separate frontend server is required.
 
-Click **▶ Start Simulation** to initialise the network topology and begin the live KPI feed.
+### 5. Run tests
 
----
+```bash
+pytest
+```
 
 ## API Reference
 
-All endpoints return JSON. Base URL: `http://localhost:5050`
+Base URL: `http://localhost:5050/api`
 
-| Method | Endpoint          | Description                                                |
-| ------ | ----------------- | ---------------------------------------------------------- |
-| `GET`  | `/api/health`     | Service health check                                       |
-| `GET`  | `/api/status`     | Simulation running state, traffic active, KPI availability |
-| `POST` | `/api/start`      | Initialise topology, start traffic & background loop       |
-| `POST` | `/api/stop`       | Stop simulation and background loop                        |
-| `GET`  | `/api/kpis`       | Latest KPI snapshot + any active anomalies                 |
-| `GET`  | `/api/topology`   | Node list, link map, node types, current parameters        |
-| `GET`  | `/api/parameters` | Current `NetworkParameters` object                         |
-| `POST` | `/api/parameters` | Update bandwidth / queue size / scheduling / traffic load  |
-| `GET`  | `/api/aggregated` | Rolling 10-second min/max/avg KPIs                         |
-| `GET`  | `/api/log`        | Recent parameter change log (last 50 entries)              |
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Service health check |
+| `GET` | `/status` | Simulation and automation state |
+| `GET` | `/control-mode` | Read current manual/automated mode |
+| `POST` | `/control-mode` | Switch between manual config and automated allocation |
+| `POST` | `/start` | Start simulation and optionally seed initial parameters |
+| `POST` | `/stop` | Stop simulation |
+| `GET` | `/kpis` | Latest KPI snapshot and active anomalies |
+| `GET` | `/topology` | Current topology and parameters |
+| `GET` | `/parameters` | Current network parameters |
+| `POST` | `/parameters` | Update parameters manually or as a scenario seed |
+| `GET` | `/aggregated` | Rolling aggregated KPIs |
+| `GET` | `/log` | Parameter change log |
 
-### Example: update parameters
+Example parameter update:
 
 ```bash
 curl -X POST http://localhost:5050/api/parameters \
   -H "Content-Type: application/json" \
   -d '{
-    "bandwidth": { "ue1_enodeb": 2.0 },
-    "scheduling_algorithm": { "enodeb": "PQ", "core_router": "WFQ" },
-    "traffic_load": { "ue1": 0.90, "ue2": 0.40 }
+    "bandwidth": {"ue1_enodeb": 3.0},
+    "queue_size": {"enodeb": 60},
+    "scheduling_algorithm": {"enodeb": "FIFO", "core_router": "FIFO"},
+    "traffic_load": {"ue1": 0.95, "ue2": 0.90}
   }'
 ```
 
----
+## Scenarios
 
-## Configuration
+The dashboard includes four presets:
 
-### Default network parameters
+- **Normal**: balanced traffic and default capacities.
+- **Congestion**: low bandwidth, small queues, high traffic load.
+- **Optimized**: larger bandwidth, larger queues, PQ scheduling, lighter load.
+- **Link Failure**: very low access-link bandwidth to model a degraded path.
 
-| Parameter               | Default         |
-| ----------------------- | --------------- |
-| `ue1_enodeb` bandwidth  | 10 Mbps         |
-| `enodeb_core` bandwidth | 100 Mbps        |
-| `core_server` bandwidth | 50 Mbps         |
-| `ue2_server` bandwidth  | 20 Mbps         |
-| Queue size (all nodes)  | 100–200 packets |
-| eNodeB scheduling       | WFQ             |
-| CoreRouter scheduling   | WFQ             |
+When automation is enabled, presets act as scenario seeds. The orchestrator then tries to adjust the network dynamically based on the live KPI stream.
 
-### Bandwidth constraints (validated server-side)
+## KPI and Anomaly Model
 
-- Minimum: **0.1 Mbps** per link
-- Maximum: **1000 Mbps** per link
-- Queue size range: **10 – 10000 packets**
+The simulator uses a bottleneck-aware KPI model:
 
-### Supported scheduling algorithms
+1. Demand is computed from bandwidth and per-UE load.
+2. Each path is evaluated independently.
+3. Utilization reflects the worst congested path.
+4. Throughput is scaled by the active scheduling profile.
+5. Latency includes congestion and queue-bloat effects.
+6. Packet loss increases with overflow and very low-bandwidth failure conditions.
 
-| Algorithm | Effect vs WFQ baseline                         |
-| --------- | ---------------------------------------------- |
-| `FIFO`    | +20% latency, +30% packet loss, −8% throughput |
-| `WFQ`     | Baseline (1×)                                  |
-| `PQ`      | −15% latency, −20% packet loss, +5% throughput |
-| `RR`      | +5% latency, −10% packet loss, −2% throughput  |
+The `AnomalyAgent` currently focuses on rule-based detection for:
 
----
+- packet loss above 5%,
+- latency above 100 ms,
+- utilization above 90%,
+- throughput drops above 30% relative to recent history.
 
-## Anomaly Detection
+Optional ML-based detectors are available in the codebase, but the current backend is configured to rely on the rule-based path for stable demo behavior.
 
-The `AnomalyAgent` uses two detection layers:
+## Project Structure
 
-### Rule-based (always active)
+```text
+telecom-optimization/
+├── backend/
+│   └── api.py
+├── frontend/
+│   ├── index.html
+│   ├── script.js
+│   └── style.css
+├── src/
+│   ├── agents/
+│   │   ├── anomaly_agent.py
+│   │   ├── optimization_agent.py
+│   │   └── predictive_agent.py
+│   ├── orchestration/
+│   │   └── master_orchestrator.py
+│   ├── simulation/
+│   │   └── network_simulator.py
+│   ├── interfaces.py
+│   ├── main.py
+│   └── models.py
+├── tests/
+├── requirements.txt
+└── setup.py
+```
 
-| Anomaly Type        | Threshold                                    |
-| ------------------- | -------------------------------------------- |
-| `PACKET_LOSS`       | > 5%                                         |
-| `LATENCY_SPIKE`     | > 100 ms                                     |
-| `THROUGHPUT_DROP`   | > 30% relative drop vs 5-sample rolling mean |
-| `UTILIZATION_SPIKE` | > 90%                                        |
+## Technology Stack
 
-### ML-based (activates after 50 samples)
+| Layer | Technology |
+| --- | --- |
+| Backend | Python, Flask, Flask-CORS |
+| Simulation | Custom network simulator, optional Mininet |
+| Optimization | Rule-based orchestration with optional predictive hooks |
+| Detection | scikit-learn, statsmodels, optional TensorFlow |
+| Frontend | Vanilla HTML, CSS, and JavaScript |
+| Testing | pytest |
 
-- **Isolation Forest** — unsupervised outlier detection on the 4-feature KPI vector
-- **One-Class SVM** — boundary-based novelty detection
-- **Autoencoder** (optional, requires TensorFlow) — reconstruction-error-based detection
+## Notes
 
-All anomalies are classified with a severity level:
-
-| Severity   | Colour |
-| ---------- | ------ |
-| `LOW`      | Blue   |
-| `MEDIUM`   | Yellow |
-| `HIGH`     | Orange |
-| `CRITICAL` | Red    |
-
-The affected node reported with each anomaly reflects the actual bottleneck node identified by the KPI engine.
-
----
-
-## KPI Model
-
-The `MockNetworkSimulator` derives all metrics from first principles each tick:
-
-1. **Demand** = link bandwidth × per-UE load fraction
-2. **Bottleneck** = `min(demand, min_link_on_path)` for each UE path independently
-3. **Utilization** = worst-case path utilization (0–100%)
-4. **Throughput** = sum of actual goodput across both paths × scheduler throughput multiplier
-5. **Latency** = base propagation + congestion term (quadratic above 75% utilization) + buffer-bloat term (queue depth × utilization) × scheduler latency multiplier
-6. **Packet loss** = overflow term (linear above 85% utilization) × scheduler loss multiplier × queue-depth softener
-7. **Bottleneck node** = the node on the most-congested path that has the smallest bandwidth
-
-Small Gaussian noise (±3–5%) is added to each metric to simulate real-world measurement jitter.
-
----
+- The project is currently tuned for demo and portfolio use rather than production deployment.
+- On Windows and macOS, the mock simulator is the intended runtime path.
+- On Linux with Mininet installed, the simulator can use the Mininet-backed path.
 
 ## License
 
-Academic / research use. RVCE — Department of ECE.
+MIT
