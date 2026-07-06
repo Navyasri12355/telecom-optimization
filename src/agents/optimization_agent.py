@@ -132,7 +132,7 @@ class OptimizationAgent(OptimizationAgentInterface):
                 f"({self.low_load_threshold}%-{self.high_load_threshold}%)"
             )
     
-    def adjust_capacity(self, decision: OptimizationDecision) -> NetworkParameters:
+    def adjust_capacity(self, decision: OptimizationDecision, current_parameters: Optional[NetworkParameters] = None) -> NetworkParameters:
         """
         Generate network parameter adjustments based on optimization decision.
         
@@ -149,14 +149,18 @@ class OptimizationAgent(OptimizationAgentInterface):
         
         # Extract target parameters from decision
         target_params = decision.target_parameters
-        
+
+        # Use the simulator's real current parameters when available so the
+        # update targets the live topology rather than placeholder link IDs.
+        base_parameters = current_parameters or self._generate_default_parameters()
+
         # Create network parameters based on action type
         if decision.action_type == ActionType.INCREASE_CAPACITY:
-            network_params = self._generate_capacity_increase_parameters(target_params)
+            network_params = self._generate_capacity_increase_parameters(target_params, base_parameters)
         elif decision.action_type == ActionType.DECREASE_CAPACITY:
-            network_params = self._generate_capacity_decrease_parameters(target_params)
+            network_params = self._generate_capacity_decrease_parameters(target_params, base_parameters)
         else:  # NO_ACTION
-            network_params = self._generate_no_change_parameters()
+            network_params = self._generate_no_change_parameters(base_parameters)
         
         # Set update timestamp
         network_params.update_timestamp = current_time
@@ -769,7 +773,7 @@ class OptimizationAgent(OptimizationAgentInterface):
         """Create emergency capacity increase decision."""
         emergency_multiplier = min(
             self.business_rules["max_capacity_increase"],
-            1.0 + (max_load - self.business_rules["emergency_threshold"]) / 100.0
+            max(1.5, 1.0 + (max_load - self.business_rules["emergency_threshold"]) / 40.0)
         )
         
         target_parameters = {
@@ -816,72 +820,68 @@ class OptimizationAgent(OptimizationAgentInterface):
         else:
             return 1  # Lowest priority for no action
     
-    def _generate_capacity_increase_parameters(self, target_params: Dict[str, float]) -> NetworkParameters:
+    def _generate_capacity_increase_parameters(self, target_params: Dict[str, float], base_parameters: NetworkParameters) -> NetworkParameters:
         """Generate network parameters for capacity increase."""
         bandwidth_multiplier = target_params.get("bandwidth_multiplier", 1.2)
         queue_multiplier = target_params.get("queue_size_multiplier", 1.1)
         
-        # Default network topology parameters (would be provided by NetworkSimulator in real implementation)
-        default_bandwidth = {"link_ue1_enodeb": 50.0, "link_enodeb_core": 100.0, 
-                           "link_core_server": 100.0, "link_server_ue2": 50.0}
-        default_queues = {"ue1": 100, "enodeb": 500, "core_router": 1000, "server": 500, "ue2": 100}
-        default_scheduling = {"enodeb": "WFQ", "core_router": "WFQ", "server": "FIFO"}
-        
-        # Apply capacity increases
+        # Apply capacity increases to the live topology's identifiers.
         new_bandwidth = {
-            link_id: bw * bandwidth_multiplier 
-            for link_id, bw in default_bandwidth.items()
+            link_id: bw * bandwidth_multiplier
+            for link_id, bw in base_parameters.bandwidth.items()
         }
-        
+
         new_queues = {
             node_id: int(size * queue_multiplier)
-            for node_id, size in default_queues.items()
+            for node_id, size in base_parameters.queue_size.items()
         }
         
         return NetworkParameters(
             bandwidth=new_bandwidth,
             queue_size=new_queues,
-            scheduling_algorithm=default_scheduling,
+            scheduling_algorithm=base_parameters.scheduling_algorithm.copy(),
             update_timestamp=datetime.now()
         )
     
-    def _generate_capacity_decrease_parameters(self, target_params: Dict[str, float]) -> NetworkParameters:
+    def _generate_capacity_decrease_parameters(self, target_params: Dict[str, float], base_parameters: NetworkParameters) -> NetworkParameters:
         """Generate network parameters for capacity decrease."""
         bandwidth_multiplier = target_params.get("bandwidth_multiplier", 0.8)
         queue_multiplier = target_params.get("queue_size_multiplier", 0.9)
         
-        # Default network topology parameters
-        default_bandwidth = {"link_ue1_enodeb": 50.0, "link_enodeb_core": 100.0, 
-                           "link_core_server": 100.0, "link_server_ue2": 50.0}
-        default_queues = {"ue1": 100, "enodeb": 500, "core_router": 1000, "server": 500, "ue2": 100}
-        default_scheduling = {"enodeb": "FIFO", "core_router": "FIFO", "server": "FIFO"}  # Simpler scheduling for energy saving
-        
-        # Apply capacity decreases
+        # Apply capacity decreases to the live topology's identifiers.
         new_bandwidth = {
             link_id: max(bw * bandwidth_multiplier, self.parameter_ranges["bandwidth"]["min"])
-            for link_id, bw in default_bandwidth.items()
+            for link_id, bw in base_parameters.bandwidth.items()
         }
-        
+
         new_queues = {
             node_id: max(int(size * queue_multiplier), self.parameter_ranges["queue_size"]["min"])
-            for node_id, size in default_queues.items()
+            for node_id, size in base_parameters.queue_size.items()
         }
         
         return NetworkParameters(
             bandwidth=new_bandwidth,
             queue_size=new_queues,
-            scheduling_algorithm=default_scheduling,
+            scheduling_algorithm=base_parameters.scheduling_algorithm.copy(),
             update_timestamp=datetime.now()
         )
     
-    def _generate_no_change_parameters(self) -> NetworkParameters:
+    def _generate_no_change_parameters(self, base_parameters: NetworkParameters) -> NetworkParameters:
         """Generate network parameters with no changes."""
-        # Return current default parameters
-        default_bandwidth = {"link_ue1_enodeb": 50.0, "link_enodeb_core": 100.0, 
-                           "link_core_server": 100.0, "link_server_ue2": 50.0}
+        return NetworkParameters(
+            bandwidth=base_parameters.bandwidth.copy(),
+            queue_size=base_parameters.queue_size.copy(),
+            scheduling_algorithm=base_parameters.scheduling_algorithm.copy(),
+            update_timestamp=datetime.now()
+        )
+
+    def _generate_default_parameters(self) -> NetworkParameters:
+        """Generate fallback parameters when no live topology parameters are available."""
+        default_bandwidth = {"ue1_enodeb": 50.0, "enodeb_core": 100.0, 
+                           "core_server": 100.0, "ue2_server": 50.0}
         default_queues = {"ue1": 100, "enodeb": 500, "core_router": 1000, "server": 500, "ue2": 100}
         default_scheduling = {"enodeb": "WFQ", "core_router": "WFQ", "server": "FIFO"}
-        
+
         return NetworkParameters(
             bandwidth=default_bandwidth,
             queue_size=default_queues,

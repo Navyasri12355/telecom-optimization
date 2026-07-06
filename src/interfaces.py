@@ -126,7 +126,7 @@ class OptimizationAgentInterface(ABC):
         pass
     
     @abstractmethod
-    def adjust_capacity(self, decision: OptimizationDecision) -> NetworkParameters:
+    def adjust_capacity(self, decision: OptimizationDecision, current_parameters: Optional[NetworkParameters] = None) -> NetworkParameters:
         """Generate network parameter adjustments based on decision."""
         pass
     
